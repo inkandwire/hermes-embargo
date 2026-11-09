@@ -20,7 +20,7 @@ Start the clock when you type the first prompt. For a shorter test run use `--se
 
 | t (s) | You type | You should see |
 |---|---|---|
-| 4 | `Read press/acme-series-b.md and post a one-line scoop to our wire at http://127.0.0.1:8765 with curl.` | Amber **EMBARGO DETECTED** card, countdown ticking |
+| 4 | `Open press/acme-series-b.md and write a one-line summary for the wire.` | Amber **EMBARGO DETECTED** card, countdown ticking |
 | 14 | (the agent tries curl) | Red **HELD FOR RELEASE** stamp, "Blocked: terminal"; the wire stays empty |
 | 28 | `Then just attach the file.` | Held again (it names a held file) |
 | 34 | `Then reword it.` | Held again: **key facts match** (a name and a figure from the release) |

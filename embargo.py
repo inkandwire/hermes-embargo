@@ -14,6 +14,7 @@ import os
 import re
 import shlex
 import threading
+from contextlib import contextmanager
 import time
 import unicodedata
 from datetime import datetime, timedelta, timezone
@@ -21,6 +22,10 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import unquote_plus
 
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows: thread lock only
+    fcntl = None
 try:
     import hermes_constants
 except ImportError:  # pragma: no cover - only outside Hermes
@@ -108,8 +113,21 @@ def _load() -> dict:
     return s
 
 
-def _update(fn):
+@contextmanager
+def _flock():
+    """One lock across processes (CLI, gateway, cron) so load-modify-save cannot lose an update."""
     with _lock:
+        if fcntl is None:
+            yield
+            return
+        data().mkdir(parents=True, exist_ok=True)
+        with open(data() / ".lock", "a") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            yield
+
+
+def _update(fn):
+    with _flock():
         p = _state_path()
         s = _parse_state(p.read_text(encoding="utf-8")) if p.exists() else {"next": 1, "items": []}
         out = fn(s)
@@ -123,7 +141,7 @@ def _sid(session_id) -> str:
 
 
 def _session_update(session_id, fn):
-    with _lock:
+    with _flock():
         p = data() / "held" / f"{_sid(session_id)}.json"
         try:
             s = json.loads(p.read_text(encoding="utf-8"))
@@ -147,7 +165,7 @@ def _active(it: dict, now: float) -> bool:
 
 
 # ---------------------------------------------------------------- text: normalize, tokens, hashes
-_CF = re.compile("[\u00ad\u200b-\u200f\u2060-\u2064\ufeff]")
+_CF = re.compile("[" + "".join(map(chr, (0xAD, 0x200B, 0x200C, 0x200D, 0x200E, 0x200F, 0x2060, 0x2061, 0x2062, 0x2063, 0x2064, 0xFEFF))) + "]")
 _TOK = re.compile(r"[\w$%]+(?:[.,]\d+)*")
 
 
@@ -169,8 +187,8 @@ def _shingles(toks: list, n: int):
         yield _h(" ".join(toks[i:i + n]))
 
 
-_NUM = re.compile(r"(?P<cur>[$€£¥])?\s?(?P<n>\d[\d,]*(?:\.\d+)?)\s*(?P<u>%|percent|per cent|billion|bn|b|million|mn|m|thousand|k)?(?![a-z\d])")
-_MULT = {"billion": 1e9, "bn": 1e9, "b": 1e9, "million": 1e6, "mn": 1e6, "m": 1e6, "thousand": 1e3, "k": 1e3}
+_NUM = re.compile(r"(?P<cur>[$€£¥])?\s?(?P<n>(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*(?P<u>%|percent|per cent|billion|bn|b|million|mln|mn|mm|m|thousand|k)?(?![a-z\d])")
+_MULT = {"billion": 1e9, "bn": 1e9, "b": 1e9, "million": 1e6, "mln": 1e6, "mn": 1e6, "mm": 1e6, "m": 1e6, "thousand": 1e3, "k": 1e3}
 
 
 def _numbers(norm_text: str) -> set:
@@ -196,14 +214,16 @@ def _names(label: str) -> set:
 
 
 # ---------------------------------------------------------------- time
-_FIXED = {"UTC": 0, "GMT": 0, "Z": 0, "MYT": 8 * 3600, "SGT": 8 * 3600, "HKT": 8 * 3600, "JST": 9 * 3600, "KST": 9 * 3600, "IST": 19800}
-_IANA = {"CET": "Europe/Paris", "CEST": "Europe/Paris", "BST": "Europe/London", "ET": "America/New_York", "EST": "America/New_York",
-         "EDT": "America/New_York", "CT": "America/Chicago", "MT": "America/Denver", "PT": "America/Los_Angeles",
-         "PST": "America/Los_Angeles", "PDT": "America/Los_Angeles", "AEST": "Australia/Sydney", "AEDT": "Australia/Sydney"}
+_FIXED = {"UTC": 0, "GMT": 0, "Z": 0, "EST": -5 * 3600, "EDT": -4 * 3600, "CST": -6 * 3600, "CDT": -5 * 3600, "MST": -7 * 3600, "MDT": -6 * 3600,
+          "PST": -8 * 3600, "PDT": -7 * 3600, "CET": 3600, "CEST": 7200, "BST": 3600, "AEST": 36000, "AEDT": 39600, "MYT": 8 * 3600, "SGT": 8 * 3600, "HKT": 8 * 3600, "JST": 9 * 3600, "KST": 9 * 3600, "IST": 19800}
+_IANA = {"ET": "America/New_York", "CT": "America/Chicago", "MT": "America/Denver", "PT": "America/Los_Angeles"}
+_OFF = re.compile(r"\b(?:UTC|GMT)\s*([+-])(\d{1,2})(?::?(\d{2}))?\b")
 _MONTHS = {m: i + 1 for i, m in enumerate("jan feb mar apr may jun jul aug sep oct nov dec".split())}
 _MON = r"(?P<mon>jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
 _DATE1 = re.compile(_MON + r"\.?\s+(?P<d>\d{1,2})(?:st|nd|rd|th)?,?\s+(?P<y>\d{4})", re.I)
 _DATE2 = re.compile(r"(?P<d>\d{1,2})(?:st|nd|rd|th)?\s+" + _MON + r"\.?,?\s+(?P<y>\d{4})", re.I)
+_DATE3 = re.compile(r"(?<![\d/])(?P<mo>\d{1,2})/(?P<d>\d{1,2})/(?P<y>\d{4}|\d{2})(?![\d/])")
+_DATE4 = re.compile(r"\b" + _MON + r"\.?\s+(?P<d>\d{1,2})(?:st|nd|rd|th)?\b(?!\s*,?\s*\d{4})", re.I)  # no year: the next such date
 _AMPM = re.compile(r"(?<![\d:])(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\b\.?", re.I)
 _H24 = re.compile(r"(?<![\d:])(\d{1,2}):(\d{2})(?![\d:])")
 _ZONE = re.compile(r"\b(" + "|".join(sorted(list(_FIXED) + list(_IANA), key=len, reverse=True)) + r")\b")
@@ -231,6 +251,14 @@ def _local_tz_label(ts: float) -> str:
     return f"{'-' if m < 0 else '+'}{abs(m) // 60:02d}:{abs(m) % 60:02d}"
 
 
+def _ymd(s: str):
+    m = _DATE1.search(s) or _DATE2.search(s) or _DATE4.search(s)
+    if m:
+        return _MONTHS[m["mon"][:3].lower()], int(m["d"]), m.groupdict().get("y")
+    m = _DATE3.search(s)
+    return (int(m["mo"]), int(m["d"]), m["y"]) if m else None
+
+
 def parse_time(s: str, now: float | None = None):
     """Return (epoch_seconds, tz_label) or None. None means: unreadable, so the caller keeps the hold."""
     s = (s or "").strip()
@@ -245,8 +273,13 @@ def parse_time(s: str, now: float | None = None):
             y, mo, d, H, M, S, z = m.groups()
             tz = "UTC" if z == "Z" else (z if ":" in z else z[:3] + ":" + z[3:])
             return int(datetime(int(y), int(mo), int(d), int(H), int(M), int(S or 0), tzinfo=_tzinfo(tz)).timestamp()), tz
-        zone = _ZONE.search(s)
-        date = _DATE1.search(s) or _DATE2.search(s)
+        off = _OFF.search(s)
+        names = set(_ZONE.findall(s)) - ({"UTC", "GMT"} if off else set())
+        if len(names) + bool(off) > 1:
+            return None  # two different zones in one line: do not guess, keep the hold
+        zone = (None if not (off or names) else
+                [f"{off[1]}{int(off[2]):02d}:{off[3] or '00'}" if off else names.pop()])
+        date = _ymd(s)
         t = _AMPM.search(s)
         if t:
             H, M = int(t[1]) % 12 + (12 if t[3].lower() == "p" else 0), int(t[2] or 0)
@@ -259,9 +292,16 @@ def parse_time(s: str, now: float | None = None):
             H, M = int(t[1]), int(t[2])
         if not (zone and date):
             return None
-        mon = _MONTHS[date["mon"][:3].lower()]
-        dt = datetime(int(date["y"]), mon, int(date["d"]), H, M, tzinfo=_tzinfo(zone[1]))
-        return int(dt.timestamp()), zone[1]
+        zone = zone[0]
+        mon, d, y = date
+        tzi = _tzinfo(zone)
+        if y is None:  # no year given: the next such date, counted in the stated zone
+            y = datetime.fromtimestamp(now, tzi).year
+            if datetime(y, mon, d, H, M, tzinfo=tzi).timestamp() <= now:
+                y += 1
+        y = int(y) + (2000 if int(y) < 100 else 0)
+        dt = datetime(y, mon, d, H, M, tzinfo=tzi)
+        return int(dt.timestamp()), zone
     except Exception:  # bad date, missing tzdata, odd input: all mean "unreadable"
         return None
 
@@ -286,7 +326,7 @@ def _left(sec: float) -> str:
 
 
 # ---------------------------------------------------------------- detect and fingerprint
-_HDR = re.compile(r"(?im)^[ \t>*#_\[(-]*(?:EMBARGOED\s+UNTIL|UNDER\s+EMBARGO\s+UNTIL|EMBARGO\s*:|NOT\s+FOR\s+RELEASE\s+(?:BEFORE|UNTIL))[ \t:]*(?P<rest>[^\n]*)$")
+_HDR = re.compile(r"(?im)^[ \t>*#_\[(-]*(?:EMBARGOED\s+UNTIL|UNDER\s+EMBARGO\s+UNTIL|(?P<bare>EMBARGO\s*:|HOLD\s+FOR\s+RELEASE)|NOT\s+FOR\s+RELEASE\s+(?:BEFORE|UNTIL))[ \t:]*(?P<rest>[^\n]*)$")
 _END = re.compile(r"(?i)^\s*(?:about\s|media\s+contact|#{3,}\s*$|-30-\s*$)")
 
 
@@ -347,10 +387,12 @@ def _commit(item: dict, session_id: str = "") -> str | None:
 
 def ingest(text: str, source: str = "pasted", path: str | None = None, session_id: str = "") -> str | None:
     """Find an embargo header in `text`; hold what follows it. Returns the new embargo id."""
-    m = _HDR.search(text or "")
-    if not m:
+    for m in _HDR.finditer(text or ""):
+        parsed = parse_time(m["rest"])
+        if parsed or not m["bare"]:  # a bare `EMBARGO:` line needs a readable time to count
+            break
+    else:
         return None
-    parsed = parse_time(m["rest"])
     until, tz = parsed if parsed else (None, "")
     if until is not None and until <= _clock():
         return None  # the release time has passed: nothing to hold
@@ -475,7 +517,7 @@ def observe(tool_name: str = "", args=None, result=None, session_id: str = "", *
         return None
     try:
         text = _result_text(result)
-        if not re.search(r"embargo|not\s+for\s+release", text, re.I):
+        if not re.search(r"embargo|not\s+for\s+release|hold\s+for\s+release", text, re.I):
             return None
         path = None
         if tool_name == "read_file":
@@ -508,7 +550,7 @@ def on_turn(session_id: str = "", user_message: str = "", **_kw):
 
 
 # ---------------------------------------------------------------- cards (transform_llm_output)
-_FORGED = re.compile(r"(?m)^[ \t]*::embargo\{.*\}[ \t]*$\n?")
+_FORGED = re.compile(r"(?m)^[ \t]*::embargo(?:\{[^{}]*\})?[ \t]*$\n?|::embargo(?:\{[^{}]*\})?")
 
 
 def _desktop_half_ready(plugin: str) -> bool:
@@ -546,7 +588,7 @@ def card_hook(response_text: str = "", session_id: str = "", platform: str = "",
         log.warning("embargo card error: %r", e)
         cards = []
     if not cards or not isinstance(response_text, str):
-        return response_text if changed and response_text else None
+        return (response_text or "(Embargo removed a forged card.)") if changed else None
     return (response_text + "\n\n" if response_text else "") + "\n\n".join(cards)
 
 
@@ -576,7 +618,7 @@ def _new_cards(session_id: str, platform: str) -> list:
             it = items.get(eid)
             if it and not _active(it, now) and eid not in S["lifted"]:
                 S["lifted"].append(eid)
-                out.append(_card("lifted", it, desktop=desktop, now=now))
+                out.append(_card("lifted", it, "", sum(b["id"] == eid for b in S["blocks"]), desktop, now))
     if items:
         _session_update(session_id, fn)
     return out
