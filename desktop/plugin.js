@@ -64,7 +64,8 @@ function Card({ attrs }) {
     a.state === 'lifted' && jsx('div', { className: 'emb-dim', children: 'The hold is over. Ask the agent to send it again.' }),
     when && a.state !== 'lifted' && jsx('div', { className: 'emb-dim', children: `Lifts ${when}` }),
     when && a.state !== 'lifted' && tz && jsx('div', { className: 'emb-dim', children: `Release said ${tz}` }),
-    n && jsx('div', { className: 'emb-dim', children: `${n} blocked${tool ? `, last: ${tool}` : ''}` })
+    when && a.state === 'lifted' && jsx('div', { className: 'emb-dim', children: `Lifted ${when}${n ? ` · ${n} blocked` : ''}` }),
+    n && a.state !== 'lifted' && jsx('div', { className: 'emb-dim', children: `${n} blocked${tool ? `, last: ${tool}` : ''}` })
   ] })
 }
 
