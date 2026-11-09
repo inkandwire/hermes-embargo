@@ -51,7 +51,7 @@ The agent has two tools, `embargo_add` and `embargo_status`. It can add a hold. 
 
 - **No network, no telemetry, no LLM calls.** Python standard library only.
 - State lives in the plugin data folder: label, release time, file paths, and hashes of 6-word runs, names and figures. **Never the raw release text.** (The one-line label is plain text.)
-- Hooks: `pre_tool_call` (block), `post_tool_call` and `pre_llm_call` (detect), `transform_llm_output` (card). One short context line per embargo: label and time only.
+- Hooks: `pre_tool_call` (block), `post_tool_call` and `pre_llm_call` (detect), `transform_llm_output` (card). One short context line per embargo: label and time only. Set `EMBARGO_REMINDER=off` to drop that context line and leave only the hard guard; this is for testing the guard, not for normal use.
 - If the state file is unreadable while embargoes may exist, tool calls are blocked ("Embargo state unreadable"). With no embargoes, a plugin error allows the call.
 - Agent calls that name the state files are blocked. This stops a confused agent, not a hostile one.
 

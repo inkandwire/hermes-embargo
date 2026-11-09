@@ -539,6 +539,8 @@ def on_turn(session_id: str = "", user_message: str = "", **_kw):
     try:
         if isinstance(user_message, str) and _HDR.search(user_message):
             ingest(user_message, "pasted", None, session_id)
+        if os.environ.get("EMBARGO_REMINDER", "").strip().lower() == "off":
+            return None  # reminder off: only the hard guard remains (for testing it)
         now = _clock()
         lines = [_context_line(i, now) for i in _load()["items"] if _active(i, now)][:5]
         if lines:

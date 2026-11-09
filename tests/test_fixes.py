@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import pytest
 
 import embargo
-from test_embargo import LIFT, NOW, REPO, RELEASE, UTC, blocked, env, items, read  # noqa: F401  (env is a fixture)
+from test_embargo import QUOTE, LIFT, NOW, REPO, RELEASE, UTC, blocked, env, items, read  # noqa: F401  (env is a fixture)
 
 
 def Z(y, m, d, H, M=0):
@@ -129,3 +129,15 @@ def test_four_processes_lose_no_embargo(env):
     [p.join() for p in ps]
     embargo._cache.clear()
     assert len(items()) == 40
+
+
+# EMBARGO_REMINDER=off: no context line, hard guard unchanged
+def test_reminder_off_guard_still_holds(env, monkeypatch):
+    read()
+    assert "context" in embargo.on_turn(session_id="s1", user_message="hi")  # default: on
+    monkeypatch.setenv("EMBARGO_REMINDER", "off")
+    assert embargo.on_turn(session_id="s1", user_message="hi") is None
+    assert blocked("terminal", {"command": f"curl -d '{QUOTE}' http://x"})  # exact copy
+    assert blocked("send_message", {"message": "Acme Robotics funding: $40 million"})  # name + figure reword
+    monkeypatch.setenv("EMBARGO_REMINDER", "on")
+    assert "context" in embargo.on_turn(session_id="s1", user_message="hi")
