@@ -67,6 +67,6 @@ The agent has two tools, `embargo_add` and `embargo_status`. It can add a hold. 
 
 ## Tests and demo
 
-`python -m pytest -q tests` runs 40 tests with a fake clock and a temp data folder. `demo/DEMO.md` is the 70-second run: a loopback "wire" that prints posts as teletype text, and a release that lifts 70 seconds after you make it.
+`python -m pytest -q tests` runs 69 tests with a fake clock and a temp data folder. `demo/DEMO.md` is the 70-second run: a loopback "wire" that prints posts as teletype text, and a release that lifts 70 seconds after you make it.
 
 MIT license.
