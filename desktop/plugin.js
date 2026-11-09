@@ -24,12 +24,13 @@ const CSS = `
   background-image:repeating-linear-gradient(0deg,transparent 0 1.35rem,rgb(0 0 0/.045) 1.35rem calc(1.35rem + 1px));box-shadow:0 0 0 1px rgb(0 0 0/.25)}
 .emb[data-tone=red]{--tone:var(--red)}.emb[data-tone=amber]{--tone:var(--amber)}.emb[data-tone=green]{--tone:var(--green)}.emb[data-tone=grey]{--tone:var(--grey)}
 .emb-top{display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem}
-.emb-stamp{color:var(--tone);border:.1875rem double var(--tone);padding:.125rem .5rem;font-size:.9375rem;letter-spacing:.08em;transform:rotate(-2.5deg);background:rgb(255 255 255/.35)}
+.emb-stamp{color:var(--tone);border:.375rem double var(--tone);padding:.25rem .625rem;font-size:1rem;font-weight:800;letter-spacing:.08em;transform:rotate(-2.5deg);background:rgb(255 255 255/.35)}
 @media (prefers-reduced-motion:no-preference){.emb-stamp{animation:emb-slam .28s cubic-bezier(.2,.9,.3,1.2) both}@keyframes emb-slam{from{transform:rotate(-2.5deg) scale(1.9);opacity:0}to{transform:rotate(-2.5deg) scale(1);opacity:1}}}
-.emb-id{color:var(--grey);font-size:.75rem;padding-top:.25rem}
+.emb-id{color:var(--paper);background:var(--ink);font-size:.8125rem;font-weight:700;padding:.125rem .5rem;border-radius:.25rem}
 .emb-label{font-weight:700;font-size:.875rem;overflow-wrap:anywhere}
 .emb-count{font-size:1.75rem;line-height:1.1;letter-spacing:.04em;font-variant-numeric:tabular-nums;color:var(--tone)}
-.emb-dim{color:var(--grey);font-weight:500;font-size:.75rem}`
+.emb-dim{color:#33322e;font-weight:600;font-size:1rem}
+.emb-dim code{font:inherit;font-weight:700;background:rgb(0 0 0/.09);padding:.0625rem .3rem;border-radius:.1875rem}`
 
 function Card({ attrs }) {
   const a = attrs || {}
@@ -50,7 +51,7 @@ function Card({ attrs }) {
   const left = live ? Math.max(0, until - now) : null
   const cleared = live && left === 0
   const tone = cleared ? 'green' : spec.tone
-  const stamp = cleared ? 'CLEARED — ask again to send' : spec.stamp
+  const stamp = cleared ? 'CLEARED' : spec.stamp
   const when = until ? new Date(until * 1000).toLocaleString([], { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' }) : null
   const label = clean(a.label)
   return jsxs('section', { className: 'emb', 'data-tone': tone, 'aria-label': `Embargo ${id}: ${stamp}`, children: [
@@ -58,9 +59,12 @@ function Card({ attrs }) {
     jsxs('div', { className: 'emb-top', children: [jsx('span', { className: 'emb-stamp', children: stamp }), jsx('span', { className: 'emb-id', children: id })] }),
     label && jsx('div', { className: 'emb-label', children: label }),
     left !== null && jsx('div', { className: 'emb-count', role: 'timer', children: clock(left) }),
-    a.state === 'unset' && jsx('div', { className: 'emb-dim', children: `Held until you set a time: /embargo set ${id} <time>` }),
+    cleared && jsx('div', { className: 'emb-dim', children: 'Ask again to send.' }),
+    a.state === 'unset' && jsxs('div', { className: 'emb-dim', children: ['Set a release time: ', jsx('code', { children: `/embargo set ${id} 09:00` })] }),
     a.state === 'lifted' && jsx('div', { className: 'emb-dim', children: 'The hold is over. Ask the agent to send it again.' }),
-    jsx('div', { className: 'emb-dim', children: [when && a.state !== 'lifted' && `lifts ${when}${tz ? ` (${tz} in the release)` : ''}`, n && `${n} blocked${tool ? `, last: ${tool}` : ''}`].filter(Boolean).join(' · ') })
+    when && a.state !== 'lifted' && jsx('div', { className: 'emb-dim', children: `Lifts ${when}` }),
+    when && a.state !== 'lifted' && tz && jsx('div', { className: 'emb-dim', children: `Release said ${tz}` }),
+    n && jsx('div', { className: 'emb-dim', children: `${n} blocked${tool ? `, last: ${tool}` : ''}` })
   ] })
 }
 
