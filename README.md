@@ -23,11 +23,9 @@ For the countdown card in Hermes Desktop, switch on the Desktop part of **Embarg
 
 Nothing to configure. The agent reads a file, a page or a pasted message that has a header line, and Embargo takes over.
 
-```
-EMBARGOED UNTIL 9:00 a.m. ET, Nov 12, 2026
-```
+A header line looks like `EMBARGOED UNTIL 9:00 a.m. ET, Nov 12, 2026`.
 
-Headers (at the start of a line): `EMBARGOED UNTIL`, `UNDER EMBARGO UNTIL`, `EMBARGO:`, `NOT FOR RELEASE BEFORE|UNTIL`. Times: ISO 8601 with an offset, `9:00 a.m. ET, Nov 12, 2026`, `09:00 MYT, 12 November 2026`, and common zone names (ET, PT, UTC, MYT, CET and more). If the time cannot be read, the text stays held until you set one.
+Headers (at the start of a line): `EMBARGOED UNTIL`, `UNDER EMBARGO UNTIL`, `EMBARGO:` and `HOLD FOR RELEASE` (these two need a readable time), `NOT FOR RELEASE BEFORE|UNTIL`. Times: ISO 8601 with an offset, `9:00 a.m. ET, Nov 12, 2026`, `11/14/24 12 P.M. ET`, `7:30AM ET, March 18` (no year: the next such date), `09:00 MYT, 12 November 2026`, `UTC-5`, and common zone names (ET, EST, PT, CET, MYT and more; two different zones on one line count as unreadable). If the time cannot be read, the text stays held until you set one.
 
 While an embargo is active, any tool call is blocked if it carries:
 
@@ -60,8 +58,9 @@ The agent has two tools, `embargo_add` and `embargo_status`. It can add a hold. 
 ## Limits
 
 - **A send guard, not a privacy filter.** Your model provider still sees whatever you let the agent read.
-- It catches copies, quotes and reworded posts that repeat the key names and figures. It is not a full paraphrase detector: a rewrite with no shared names or figures gets through.
-- Text built some other way (base64, a script that reads the file) is not seen.
+- It catches copies, quotes and reworded posts that repeat the headline names and figures. It is not a full paraphrase detector: a rewrite with no shared names or figures gets through.
+- Text built some other way is not seen: base64 or other encodings, a script that reads the file, spelled-out numbers ("forty million"), look-alike letters (Cyrillic), and a paraphrase that drops the headline name or the figure.
+- A copy shorter than 6 words in a row (for example 5-word chunks) is not matched.
 - Detection reads file and web tool results and pasted messages. A header the agent never reads is not seen.
 - Text after `-30-`, `###` or "About …" is not fingerprinted.
 - The countdown is a display. Python decides what is held. Local clock only.
