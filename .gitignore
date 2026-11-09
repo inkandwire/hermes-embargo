@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+e2e-home/
+.pytest_cache/

@@ -1,0 +1,13 @@
+name: embargo
+version: 0.1.0
+description: "Embargoed news stays embargoed. When the agent reads 'EMBARGOED UNTIL <time>', no tool can send that text out until the clock passes; a live countdown stamp shows what is held, and the hold lifts by itself."
+author: "Ink & Wire"
+requires_hermes: ">=0.22.5"
+provides_tools:
+  - embargo_add
+  - embargo_status
+provides_hooks:
+  - pre_tool_call
+  - post_tool_call
+  - pre_llm_call
+  - transform_llm_output
