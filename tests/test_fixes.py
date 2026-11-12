@@ -141,3 +141,13 @@ def test_reminder_off_guard_still_holds(env, monkeypatch):
     assert blocked("send_message", {"message": "Acme Robotics funding: $40 million"})  # name + figure reword
     monkeypatch.setenv("EMBARGO_REMINDER", "on")
     assert "context" in embargo.on_turn(session_id="s1", user_message="hi")
+
+
+# Review of ee4605a7: a long digit run that ends in a letter must not backtrack quadratically
+def test_long_digit_run_is_linear():
+    import time
+    s = "1" * 20_000 + "x"
+    t = time.perf_counter()
+    embargo._numbers(s)
+    assert time.perf_counter() - t < 0.5
+    assert embargo._numbers("raised $40 million, 1,234,567 users, 12.5%") == embargo._numbers("raised $40m, 1,234,567 users, 12.5 percent")
