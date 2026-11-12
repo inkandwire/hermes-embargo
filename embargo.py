@@ -187,7 +187,8 @@ def _shingles(toks: list, n: int):
         yield _h(" ".join(toks[i:i + n]))
 
 
-_NUM = re.compile(r"(?P<cur>[$€£¥])?\s?(?P<n>(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*(?P<u>%|percent|per cent|billion|bn|b|million|mln|mn|mm|m|thousand|k)?(?![a-z\d])")
+# Start only at a digit-run boundary and bound every run, so a long digit run that ends in a letter is linear, not quadratic.
+_NUM = re.compile(r"(?P<cur>[$€£¥])?\s?(?<![\d,.])(?P<n>(?:\d{1,3}(?:,\d{3}){1,6}|\d{1,15})(?:\.\d{1,6})?)\s*(?P<u>%|percent|per cent|billion|bn|b|million|mln|mn|mm|m|thousand|k)?(?![a-z\d])")
 _MULT = {"billion": 1e9, "bn": 1e9, "b": 1e9, "million": 1e6, "mln": 1e6, "mn": 1e6, "mm": 1e6, "m": 1e6, "thousand": 1e3, "k": 1e3}
 
 
